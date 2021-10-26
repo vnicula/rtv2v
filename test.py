@@ -5,6 +5,7 @@ few samples and play them back immediately).
 This is the callback (non-blocking) version.
 """
 
+import json
 import librosa
 import librosa.display
 import matplotlib
@@ -15,7 +16,9 @@ import time
 from librosa.filters import mel as librosa_mel_fn
 import torch
 import torch.utils.data
-import tensorflow as tf
+# import tensorflow as tf
+
+from models import Generator
 
 attr_d = {
     "segment_size": 8192,
@@ -93,23 +96,49 @@ def mel_spectrogram(y, n_fft, num_mels, sampling_rate, hop_size, win_size, fmin,
     return spec
 
 
+"""
+# TF inference
 model_name = f'lite-model_hifi-gan_dr_1.tflite'
 interpreter = tf.lite.Interpreter(model_path=model_name)
 input_details = interpreter.get_input_details()
 output_details = interpreter.get_output_details()
-
+resized_input = False
 
 def tflite_inference(input, quantization='dr'):
-    interpreter.resize_tensor_input(input_details[0]['index'],  [1, input.shape[1], input.shape[2]], strict=True)
-    interpreter.allocate_tensors()
+    global resized_input
+    if not resized_input:
+        interpreter.resize_tensor_input(input_details[0]['index'],  [1, input.shape[1], input.shape[2]], strict=True)
+        interpreter.allocate_tensors()
+        resized_input=True
     interpreter.set_tensor(input_details[0]['index'], input)
     interpreter.invoke()
     output = interpreter.get_tensor(output_details[0]['index'])
     return output
+"""
 
 p = pyaudio.PyAudio()
 for i in range(p.get_device_count()):
     print(p.get_device_info_by_index(i))
+
+config = 'config_v3.json'
+device = 'cpu'
+with open(config) as f:
+    data = f.read()
+
+class AttrDict(dict):
+    def __init__(self, *args, **kwargs):
+        super(AttrDict, self).__init__(*args, **kwargs)
+        self.__dict__ = self
+
+json_config = json.loads(data)
+h = AttrDict(json_config)
+
+torch_checkpoints = torch.load("generator_v3", map_location=torch.device('cpu'))
+torch_generator_weights = torch_checkpoints["generator"]
+torch_model = Generator(h)
+torch_model.load_state_dict(torch_checkpoints["generator"])
+torch_model.eval()
+torch_model.remove_weight_norm()
 
 def callback(in_data, frame_count, time_info, status):
     data = np.fromstring(in_data, dtype=np.float32)
@@ -119,7 +148,7 @@ def callback(in_data, frame_count, time_info, status):
     spec = mel_spectrogram(audio, attr_d["n_fft"], attr_d["num_mels"], attr_d["sampling_rate"], 
         attr_d["hop_size"], attr_d["win_size"], attr_d["fmin"], attr_d["fmax"])
 
-    matplotlib.image.imsave('myfig_' + str(frame_count) + '.png', spec[0])
+    # matplotlib.image.imsave('myfig_' + str(frame_count) + '.png', spec[0])
 
     # melspec = do_melspec(y=data, sr=RATE, n_mels=128, fmax=4000)
     # norm_melspec = pwr_to_db(melspec, ref=np.max)
@@ -137,20 +166,23 @@ def callback(in_data, frame_count, time_info, status):
     #     #break
     #     frames.pop(0)
 
-    spec_in = spec.detach().numpy()
-    output = tflite_inference(spec_in).squeeze()
+    # spec_in = spec.detach().numpy()
+    # output = tflite_inference(spec_in).squeeze()
 
+    hifigan_output = torch_model(spec)
+    output = hifigan_output.squeeze().detach().numpy()
     print(spec[:10])
     print(spec.shape)
 
     return (output, pyaudio.paContinue)
+
 
 stream = p.open(format=pyaudio.paFloat32,
                 channels=CHANNELS,
                 rate=attr_d["sampling_rate"],
                 input=True,
                 output=True,
-                frames_per_buffer=attr_d["segment_size"],
+                frames_per_buffer=4*attr_d["segment_size"],
                 stream_callback=callback)
 
 print("Starting to listen.")
