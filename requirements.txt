@@ -1,0 +1,6 @@
+librosa==0.8.1
+matplotlib==3.4.3
+numpy==1.19.5
+PyAudio==0.2.11
+tensorflow==2.5.0
+torch==1.10.0
