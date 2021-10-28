@@ -9,6 +9,7 @@ import time
 from JDC.model import JDCNet
 from stmodels import Generator, MappingNetwork, StyleEncoder
 from parallel_wavegan.utils import load_model
+# from parallel_wavegan.models import MelGANGenerator
 
 to_mel = torchaudio.transforms.MelSpectrogram(
     n_mels=80, n_fft=2048, win_length=1200, hop_length=300)
@@ -70,7 +71,8 @@ def load_stargan_v2():
 def load_vocoder():
     # load vocoder
     # vocoder = load_model("Vocoder/checkpoint-400000steps.pkl").to('cuda').eval()
-    vocoder = load_model("Vocoder/checkpoint-400000steps.pkl").eval()
+    # vocoder = load_model("Vocoder/checkpoint-400000steps.pkl").eval()
+    vocoder = load_model("pretrained_model/libritts_multi_band_melgan.v2/checkpoint-1000000steps.pkl").eval()
     vocoder.remove_weight_norm()
     _ = vocoder.eval()
     return vocoder
