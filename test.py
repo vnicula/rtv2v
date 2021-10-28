@@ -10,12 +10,14 @@ import librosa
 import librosa.display
 import matplotlib
 import matplotlib.pyplot as plt
+# from numba import jit
 import numpy as np
 import pyaudio
 import time
 from librosa.filters import mel as librosa_mel_fn
 import torch
 import torch.utils.data
+import v2v
 # import tensorflow as tf
 
 from models import Generator
@@ -69,7 +71,7 @@ def spectral_de_normalize_torch(magnitudes):
     output = dynamic_range_decompression_torch(magnitudes)
     return output
 
-
+# @jit
 def mel_spectrogram(y, n_fft, num_mels, sampling_rate, hop_size, win_size, fmin, fmax, center=False):
     if torch.min(y) < -1.:
         print('min value is ', torch.min(y))
@@ -140,8 +142,14 @@ torch_model.load_state_dict(torch_checkpoints["generator"])
 torch_model.eval()
 torch_model.remove_weight_norm()
 
+# Conversion model
+f0model = v2v.load_F0_model()
+stgv2 = v2v.load_stargan_v2()
+myref = v2v.compute_style(stgv2)
+
+"""
 def callback(in_data, frame_count, time_info, status):
-    data = np.fromstring(in_data, dtype=np.float32)
+    data = np.frombuffer(in_data, dtype=np.float32)
     audio = torch.FloatTensor(data)
     audio = audio.unsqueeze(0)
 
@@ -168,11 +176,26 @@ def callback(in_data, frame_count, time_info, status):
 
     # spec_in = spec.detach().numpy()
     # output = tflite_inference(spec_in).squeeze()
-
-    hifigan_output = torch_model(spec)
+    with torch.no_grad():
+        hifigan_output = torch_model(spec)
     output = hifigan_output.squeeze().detach().numpy()
-    print(spec[:10])
-    print(spec.shape)
+    # print(spec[:10])
+    # print(spec.shape)
+
+    return (output, pyaudio.paContinue)
+"""
+
+def callback(in_data, frame_count, time_info, status):
+    data = np.frombuffer(in_data, dtype=np.float32)
+    # wave = torch.from_numpy(data).float()
+    # wave = torch.FloatTensor(data)
+
+    audio = v2v.preprocess(data)
+    spec = v2v.conversion(audio, f0model, stgv2, myref)
+
+    with torch.no_grad():
+        hifigan_output = torch_model(spec)
+    output = hifigan_output.squeeze().detach().numpy()
 
     return (output, pyaudio.paContinue)
 
@@ -182,7 +205,7 @@ stream = p.open(format=pyaudio.paFloat32,
                 rate=attr_d["sampling_rate"],
                 input=True,
                 output=True,
-                frames_per_buffer=4*attr_d["segment_size"],
+                frames_per_buffer=attr_d["segment_size"],
                 stream_callback=callback)
 
 print("Starting to listen.")
