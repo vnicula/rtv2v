@@ -146,6 +146,7 @@ torch_model.remove_weight_norm()
 f0model = v2v.load_F0_model()
 stgv2 = v2v.load_stargan_v2()
 myref = v2v.compute_style(stgv2)
+voco = v2v.load_vocoder()
 
 """
 def callback(in_data, frame_count, time_info, status):
@@ -190,22 +191,25 @@ def callback(in_data, frame_count, time_info, status):
     # wave = torch.from_numpy(data).float()
     # wave = torch.FloatTensor(data)
 
-    audio = v2v.preprocess(data)
-    spec = v2v.conversion(audio, f0model, stgv2, myref)
+    spec = v2v.conversion(data, f0model, stgv2, myref, voco) #.squeeze(1)
+    print("spec shpe:", spec.shape)
 
-    with torch.no_grad():
-        hifigan_output = torch_model(spec)
-    output = hifigan_output.squeeze().detach().numpy()
+    # with torch.no_grad():
+    #     hifigan_output = torch_model(spec)
+    # output = hifigan_output.squeeze().detach().numpy()
+    # print(output[:10], output.shape)
 
-    return (output, pyaudio.paContinue)
+    return (spec[:9600], pyaudio.paContinue)
 
 
 stream = p.open(format=pyaudio.paFloat32,
                 channels=CHANNELS,
-                rate=attr_d["sampling_rate"],
+                # rate=attr_d["sampling_rate"],
+                rate=24000,
                 input=True,
                 output=True,
-                frames_per_buffer=attr_d["segment_size"],
+                # frames_per_buffer=attr_d["segment_size"],
+                frames_per_buffer=9600,
                 stream_callback=callback)
 
 print("Starting to listen.")

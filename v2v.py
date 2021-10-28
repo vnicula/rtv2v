@@ -8,7 +8,7 @@ import torchaudio
 import time
 from JDC.model import JDCNet
 from stmodels import Generator, MappingNetwork, StyleEncoder
-
+from parallel_wavegan.utils import load_model
 
 to_mel = torchaudio.transforms.MelSpectrogram(
     n_mels=80, n_fft=2048, win_length=1200, hop_length=300)
@@ -67,7 +67,15 @@ def load_stargan_v2():
 
     return starganv2
 
-def conversion(audio, F0_model, starganv2, ref):
+def load_vocoder():
+    # load vocoder
+    # vocoder = load_model("Vocoder/checkpoint-400000steps.pkl").to('cuda').eval()
+    vocoder = load_model("Vocoder/checkpoint-400000steps.pkl").eval()
+    vocoder.remove_weight_norm()
+    _ = vocoder.eval()
+    return vocoder
+
+def conversion(audio, F0_model, starganv2, ref, vocoder):
     # conversion 
     start = time.time()
         
@@ -75,12 +83,13 @@ def conversion(audio, F0_model, starganv2, ref):
     source = preprocess(audio)
 
     with torch.no_grad():
-        f0_feat = F0_model.get_feature_GAN(source.unsqueeze(1))
-        out = starganv2.generator(source.unsqueeze(1), ref, F0=f0_feat)
+        # f0_feat = F0_model.get_feature_GAN(source.unsqueeze(1))
+        # out = starganv2.generator(source.unsqueeze(1), ref, F0=f0_feat)
+        out = source
         
-        # c = out.transpose(-1, -2).squeeze().to('cuda')
-        # y_out = vocoder.inference(c)
-        # y_out = y_out.view(-1).cpu()
+        c = out.transpose(-1, -2).squeeze() #.to('cuda')
+        y_out = vocoder.inference(c)
+        y_out = y_out.view(-1).cpu()
 
         # if key not in speaker_dicts or speaker_dicts[key][0] == "":
         #     recon = None
@@ -94,4 +103,4 @@ def conversion(audio, F0_model, starganv2, ref):
     end = time.time()
     print('total processing time: %.3f sec' % (end - start) )
 
-    return out
+    return y_out.numpy()
