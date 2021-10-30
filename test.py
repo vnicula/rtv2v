@@ -199,7 +199,7 @@ def callback(in_data, frame_count, time_info, status):
     # output = hifigan_output.squeeze().detach().numpy()
     # print(output[:10], output.shape)
 
-    return (spec[:9600], pyaudio.paContinue)
+    return (spec[:24000], pyaudio.paContinue)
 
 
 stream = p.open(format=pyaudio.paFloat32,
@@ -209,7 +209,7 @@ stream = p.open(format=pyaudio.paFloat32,
                 input=True,
                 output=True,
                 # frames_per_buffer=attr_d["segment_size"],
-                frames_per_buffer=9600,
+                frames_per_buffer=24000,
                 stream_callback=callback)
 
 print("Starting to listen.")

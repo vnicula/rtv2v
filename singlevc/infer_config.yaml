@@ -1,0 +1,21 @@
+########################################## SINGLEVC  ##########################
+test_wav_dir: "SingleVC_Infer/"
+out_dir: "infer_output/"
+resume: True
+resume_model_path: "pretrained/SingleVC/checkpoint-3000.pt"
+local_rank: 1
+step_record_time: 8
+########################################## HIFI-GAN ##########################
+hifi_model_path: "pretrained/HiFi-GAN/UNIVERSAL_V1/g_02500000"
+hifi_config_path: "pretrained/HiFi-GAN/UNIVERSAL_V1/config.json"
+
+########################################## MEL-FEATURE ##########################
+num_mels: 80
+num_freq: 1025
+n_fft: 1024
+hop_size: 256
+win_size: 1024
+sampling_rate: 22050
+fmin: 0
+fmax: 8000
+num_workers: 1
