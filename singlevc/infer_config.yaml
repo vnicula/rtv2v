@@ -2,7 +2,7 @@
 test_wav_dir: "SingleVC_Infer/"
 out_dir: "infer_output/"
 resume: True
-resume_model_path: "pretrained/SingleVC/checkpoint-3000.pt"
+resume_model_path: "singlevc/pretrained/SingleVC/checkpoint-3000.pt"
 local_rank: 1
 step_record_time: 8
 ########################################## HIFI-GAN ##########################

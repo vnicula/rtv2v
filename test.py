@@ -6,6 +6,7 @@ This is the callback (non-blocking) version.
 """
 
 import json
+import yaml
 import librosa
 import librosa.display
 import matplotlib
@@ -17,7 +18,8 @@ import time
 from librosa.filters import mel as librosa_mel_fn
 import torch
 import torch.utils.data
-import v2v
+# import v2v
+from singlevc.infer import Solver
 # import tensorflow as tf
 
 from models import Generator
@@ -47,8 +49,6 @@ plt.figure(figsize=(10, 4))
 do_melspec = librosa.feature.melspectrogram
 pwr_to_db = librosa.core.power_to_db
 
-mel_basis = {}
-hann_window = {}
 
 def dynamic_range_compression(x, C=1, clip_val=1e-5):
     return np.log(np.clip(x, a_min=clip_val, a_max=None) * C)
@@ -71,6 +71,9 @@ def spectral_de_normalize_torch(magnitudes):
     output = dynamic_range_decompression_torch(magnitudes)
     return output
 
+# mel_spec ?
+mel_basis = {}
+hann_window = {}
 # @jit
 def mel_spectrogram(y, n_fft, num_mels, sampling_rate, hop_size, win_size, fmin, fmax, center=False):
     if torch.min(y) < -1.:
@@ -86,15 +89,35 @@ def mel_spectrogram(y, n_fft, num_mels, sampling_rate, hop_size, win_size, fmin,
 
     y = torch.nn.functional.pad(y.unsqueeze(1), (int((n_fft-hop_size)/2), int((n_fft-hop_size)/2)), mode='reflect')
     y = y.squeeze(1)
-
     spec = torch.stft(y, n_fft, hop_length=hop_size, win_length=win_size, window=hann_window[str(y.device)],
                       center=center, pad_mode='reflect', normalized=False, onesided=True)
-
     spec = torch.sqrt(spec.pow(2).sum(-1)+(1e-9))
-
     spec = torch.matmul(mel_basis[str(fmax)+'_'+str(y.device)], spec)
     spec = spectral_normalize_torch(spec)
 
+    return spec
+
+
+def mel_spectrogram_singlevc(y, n_fft, num_mels, sampling_rate, hop_size, win_size, fmin, fmax, center=False):
+    if torch.min(y) < -1.:
+        print('min value is ', torch.min(y))
+    if torch.max(y) > 1.:
+        print('max value is ', torch.max(y))
+    
+    global mel_basis, hann_window
+    if fmax not in mel_basis:
+        mel = librosa_mel_fn(sampling_rate, n_fft, num_mels, fmin, fmax)
+        mel_basis[str(fmax)+'_'+str(y.device)] = torch.from_numpy(mel).float().to(y.device)
+        hann_window[str(y.device)] = torch.hann_window(win_size).to(y.device)
+    
+    y = torch.nn.functional.pad(y.unsqueeze(1), (int((n_fft-hop_size)/2), int((n_fft-hop_size)/2)), mode='reflect')
+    y = y.squeeze(1)
+    spec = torch.stft(y, n_fft, hop_length=hop_size, win_length=win_size, window=hann_window[str(y.device)],
+                      center=center, pad_mode='reflect', normalized=False, onesided=True,return_complex=False)
+    spec = torch.sqrt(spec.pow(2).sum(-1)+(1e-9))
+    spec = torch.matmul(mel_basis[str(fmax)+'_'+str(y.device)], spec)
+    spec = spectral_normalize_torch(spec)
+    
     return spec
 
 
@@ -122,7 +145,7 @@ p = pyaudio.PyAudio()
 for i in range(p.get_device_count()):
     print(p.get_device_info_by_index(i))
 
-config = 'config_v3.json'
+config = 'singlevc/pretrained/HiFi-GAN/UNIVERSAL_V1/config.json'
 device = 'cpu'
 with open(config) as f:
     data = f.read()
@@ -135,18 +158,27 @@ class AttrDict(dict):
 json_config = json.loads(data)
 h = AttrDict(json_config)
 
-torch_checkpoints = torch.load("generator_v3", map_location=torch.device('cpu'))
+# Load HiFi GAN
+torch_checkpoints = torch.load("singlevc/pretrained/HiFi-GAN/UNIVERSAL_V1/g_02500000", map_location=torch.device('cpu'))
 torch_generator_weights = torch_checkpoints["generator"]
 torch_model = Generator(h)
 torch_model.load_state_dict(torch_checkpoints["generator"])
 torch_model.eval()
 torch_model.remove_weight_norm()
 
-# Conversion model
-f0model = v2v.load_F0_model()
-stgv2 = v2v.load_stargan_v2()
-myref = v2v.compute_style(stgv2)
-voco = v2v.load_vocoder()
+# # Conversion model stargan
+# f0model = v2v.load_F0_model()
+# stgv2 = v2v.load_stargan_v2()
+# myref = v2v.compute_style(stgv2)
+# voco = v2v.load_vocoder()
+
+
+# Conversion model singlevc
+config_path = r"singlevc/infer_config.yaml"
+with open(config_path) as f:
+    config = yaml.load(f, Loader=yaml.Loader)
+SVCGen = Solver(config)
+
 
 """
 def callback(in_data, frame_count, time_info, status):
@@ -202,15 +234,34 @@ def callback(in_data, frame_count, time_info, status):
     return (spec[:24000], pyaudio.paContinue)
 
 
+def callback_singlevc(in_data, frame_count, time_info, status):
+    data = np.frombuffer(in_data, dtype=np.float32)
+    audio = torch.FloatTensor(data)
+    audio = audio.unsqueeze(0)
+
+    spec = mel_spectrogram_singlevc(audio, attr_d["n_fft"], attr_d["num_mels"], attr_d["sampling_rate"], 
+        attr_d["hop_size"], attr_d["win_size"], attr_d["fmin"], attr_d["fmax"])
+    print(spec[:10])
+    print(spec.shape)
+
+    with torch.no_grad():
+        spec = SVCGen.infer(spec.transpose(1,2))
+        hifigan_output = torch_model(spec)
+    
+    output = hifigan_output.squeeze().detach().numpy()
+
+    return (output, pyaudio.paContinue)
+
+
 stream = p.open(format=pyaudio.paFloat32,
                 channels=CHANNELS,
-                # rate=attr_d["sampling_rate"],
-                rate=24000,
+                rate=attr_d["sampling_rate"],
+                # rate=24000,
                 input=True,
                 output=True,
-                # frames_per_buffer=attr_d["segment_size"],
-                frames_per_buffer=24000,
-                stream_callback=callback)
+                frames_per_buffer=attr_d["segment_size"],
+                # frames_per_buffer=24000,
+                stream_callback=callback_singlevc)
 
 print("Starting to listen.")
 stream.start_stream()

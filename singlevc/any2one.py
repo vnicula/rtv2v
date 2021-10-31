@@ -189,13 +189,10 @@ class Generator(nn.Module):
 		self.encoder.remove_weight_norm()
 		self.decoder.remove_weight_norm()
 
-	
-
 
 def count_parameters_in_M(model):
 	return np.sum(np.prod(v.size()) for name, v in model.named_parameters() if
 	              "auxiliary" not in name) / 1e6
-
 
 def init_weights(m, mean=0.0, std=0.01):
     classname = m.__class__.__name__

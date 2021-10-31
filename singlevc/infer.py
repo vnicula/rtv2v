@@ -5,7 +5,7 @@ from torch.utils.data import DataLoader
 import numpy as np
 import yaml
 import time
-from any2one import Generator
+from singlevc.any2one import Generator
 
 def mel_denormalize(S,clip_val=1e-5):
     S = S*(0-torch.log(torch.Tensor([clip_val]))) + torch.log(torch.Tensor([clip_val]))
@@ -44,7 +44,7 @@ class Solver():
 			fake_mel = torch.clamp(fake_mel, min=0, max=1)
 			fake_mel = mel_denormalize(fake_mel)
 			fake_mel = fake_mel.transpose(1,2)
-			fake_mel = fake_mel.detach().cpu().numpy()
+			# fake_mel = fake_mel.detach().cpu().numpy()
 		return fake_mel
 
 
