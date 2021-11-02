@@ -16,6 +16,7 @@ import numpy as np
 import pyaudio
 import time
 from librosa.filters import mel as librosa_mel_fn
+from librosa.util import normalize
 import torch
 import torch.utils.data
 # import v2v
@@ -146,7 +147,6 @@ for i in range(p.get_device_count()):
     print(p.get_device_info_by_index(i))
 
 config = 'singlevc/pretrained/HiFi-GAN/UNIVERSAL_V1/config.json'
-device = 'cpu'
 with open(config) as f:
     data = f.read()
 
@@ -157,6 +157,7 @@ class AttrDict(dict):
 
 json_config = json.loads(data)
 h = AttrDict(json_config)
+print(h)
 
 # Load HiFi GAN
 torch_checkpoints = torch.load("singlevc/pretrained/HiFi-GAN/UNIVERSAL_V1/g_02500000", map_location=torch.device('cpu'))
@@ -236,7 +237,8 @@ def callback(in_data, frame_count, time_info, status):
 
 def callback_singlevc(in_data, frame_count, time_info, status):
     data = np.frombuffer(in_data, dtype=np.float32)
-    audio = torch.FloatTensor(data)
+    audio = normalize(data) * 0.95
+    audio = torch.FloatTensor(audio)
     audio = audio.unsqueeze(0)
 
     spec = mel_spectrogram_singlevc(audio, attr_d["n_fft"], attr_d["num_mels"], attr_d["sampling_rate"], 
@@ -245,10 +247,11 @@ def callback_singlevc(in_data, frame_count, time_info, status):
     print(spec.shape)
 
     with torch.no_grad():
-        spec = SVCGen.infer(spec.transpose(1,2))
+        # spec = SVCGen.infer(spec)
         hifigan_output = torch_model(spec)
     
     output = hifigan_output.squeeze().detach().numpy()
+    print(output.shape)
 
     return (output, pyaudio.paContinue)
 
