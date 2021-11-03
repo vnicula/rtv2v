@@ -58,7 +58,7 @@ class Solver():
             fake_mel = torch.clamp(fake_mel, min=0, max=1)
             fake_mel = mel_denormalize(fake_mel)
             fake_mel = fake_mel.transpose(1, 2)
-            # fake_mel = fake_mel.detach().cpu().numpy()
+            fake_mel = fake_mel.detach().cpu()
         return fake_mel
 
 

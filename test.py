@@ -147,6 +147,7 @@ for i in range(p.get_device_count()):
     print(p.get_device_info_by_index(i))
 
 config = 'singlevc/pretrained/HiFi-GAN/UNIVERSAL_V1/config.json'
+# config = 'config_v3.json'
 with open(config) as f:
     data = f.read()
 
@@ -161,6 +162,7 @@ print(h)
 
 # Load HiFi GAN
 torch_checkpoints = torch.load("singlevc/pretrained/HiFi-GAN/UNIVERSAL_V1/g_02500000", map_location=torch.device('cpu'))
+# torch_checkpoints = torch.load("generator_v3", map_location=torch.device('cpu'))
 torch_generator_weights = torch_checkpoints["generator"]
 torch_model = Generator(h)
 torch_model.load_state_dict(torch_checkpoints["generator"])
@@ -236,22 +238,22 @@ def callback(in_data, frame_count, time_info, status):
 
 
 def callback_singlevc(in_data, frame_count, time_info, status):
-    data = np.frombuffer(in_data, dtype=np.float32)
-    audio = normalize(data) * 0.95
+    audio = np.frombuffer(in_data, dtype=np.float32)
+    audio = normalize(audio) * 0.95
     audio = torch.FloatTensor(audio)
     audio = audio.unsqueeze(0)
 
-    spec = mel_spectrogram_singlevc(audio, attr_d["n_fft"], attr_d["num_mels"], attr_d["sampling_rate"], 
+    spec = mel_spectrogram(audio, attr_d["n_fft"], attr_d["num_mels"], attr_d["sampling_rate"], 
         attr_d["hop_size"], attr_d["win_size"], attr_d["fmin"], attr_d["fmax"])
-    print(spec[:10])
-    print(spec.shape)
+    # print(spec[:10])
+    # print(spec.shape)
 
     with torch.no_grad():
         # spec = SVCGen.infer(spec)
         hifigan_output = torch_model(spec)
     
     output = hifigan_output.squeeze().detach().numpy()
-    print(output.shape)
+    # print(output.shape)
 
     return (output, pyaudio.paContinue)
 
