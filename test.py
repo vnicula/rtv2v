@@ -20,7 +20,7 @@ from librosa.util import normalize
 import torch
 import torch.utils.data
 # import v2v
-from singlevc.infer import Solver
+from singlevc.infer import Solver, SolverA
 # import tensorflow as tf
 
 from models import Generator
@@ -169,10 +169,12 @@ torch_model.load_state_dict(torch_checkpoints["generator"])
 torch_model.eval()
 torch_model.remove_weight_norm()
 
-# # Conversion model stargan
+# Conversion model stargan
 # f0model = v2v.load_F0_model()
-# stgv2 = v2v.load_stargan_v2()
-# myref = v2v.compute_style(stgv2)
+# # stgv2 = v2v.load_stargan_v2()
+# stgv2 = None
+# # myref = v2v.compute_style(stgv2)
+# myref = None
 # voco = v2v.load_vocoder()
 
 
@@ -182,6 +184,13 @@ with open(config_path) as f:
     config = yaml.load(f, Loader=yaml.Loader)
 SVCGen = Solver(config)
 
+# Conversion model anyvc
+config_path = r"singlevc/infer_config_any.yaml"
+with open(config_path) as f:
+    config = yaml.load(f, Loader=yaml.Loader)
+SVCGenA = SolverA(config)
+spkembe = SVCGenA.get_spkemb_mels("p230_023.wav")
+print(spkembe)
 
 """
 def callback(in_data, frame_count, time_info, status):
@@ -221,35 +230,37 @@ def callback(in_data, frame_count, time_info, status):
     return (output, pyaudio.paContinue)
 """
 
-def callback(in_data, frame_count, time_info, status):
-    data = np.frombuffer(in_data, dtype=np.float32)
-    # wave = torch.from_numpy(data).float()
-    # wave = torch.FloatTensor(data)
+# def callback(in_data, frame_count, time_info, status):
+#     data = np.frombuffer(in_data, dtype=np.float32)
+#     # wave = torch.from_numpy(data).float()
+#     # wave = torch.FloatTensor(data)
 
-    spec = v2v.conversion(data, f0model, stgv2, myref, voco) #.squeeze(1)
-    print("spec shpe:", spec.shape)
+#     spec = v2v.conversion(data, f0model, stgv2, myref, voco) #.squeeze(1)
+#     print("spec shpe:", spec.shape)
 
-    # with torch.no_grad():
-    #     hifigan_output = torch_model(spec)
-    # output = hifigan_output.squeeze().detach().numpy()
-    # print(output[:10], output.shape)
+#     # with torch.no_grad():
+#     #     hifigan_output = torch_model(spec)
+#     # output = hifigan_output.squeeze().detach().numpy()
+#     # print(output[:10], output.shape)
 
-    return (spec[:24000], pyaudio.paContinue)
+#     return (spec[:attr_d["segment_size"]], pyaudio.paContinue)
 
 
 def callback_singlevc(in_data, frame_count, time_info, status):
-    audio = np.frombuffer(in_data, dtype=np.float32)
-    audio = normalize(audio) * 0.95
-    audio = torch.FloatTensor(audio)
+    data = np.frombuffer(in_data, dtype=np.float32)
+    # audio = normalize(audio) * 0.95
+    audio = torch.from_numpy(data).float()
     audio = audio.unsqueeze(0)
 
-    spec = mel_spectrogram(audio, attr_d["n_fft"], attr_d["num_mels"], attr_d["sampling_rate"], 
+    spec = mel_spectrogram_singlevc(audio, attr_d["n_fft"], attr_d["num_mels"], attr_d["sampling_rate"], 
         attr_d["hop_size"], attr_d["win_size"], attr_d["fmin"], attr_d["fmax"])
     # print(spec[:10])
-    # print(spec.shape)
+    print('mel hsape:', spec.shape)
 
     with torch.no_grad():
-        # spec = SVCGen.infer(spec)
+        # spec = SVCGenA.infer(spec, spkembe)
+        spec = SVCGen.infer(spec)
+        print('trans shape:', spec.shape)
         hifigan_output = torch_model(spec)
     
     output = hifigan_output.squeeze().detach().numpy()
