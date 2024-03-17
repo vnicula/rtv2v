@@ -12,14 +12,14 @@ from singlevc.any2any import MagicModel
 
 
 def mel_denormalize(S, clip_val=1e-5):
-    S = S*(0-torch.log(torch.Tensor([clip_val]))
-           ) + torch.log(torch.Tensor([clip_val]))
+    clip = torch.log(torch.Tensor([clip_val]).to(S.device))
+    S = S*(0-clip) + clip
     return S
 
 
 def mel_normalize(S, clip_val=1e-5):
-    S = (S - torch.log(torch.Tensor([clip_val]))) * \
-        1.0/(0-torch.log(torch.Tensor([clip_val])))
+    clip = torch.log(torch.Tensor([clip_val]).to(S.device))
+    S = (S - clip) * 1.0/(0-clip)
     return S
 
 

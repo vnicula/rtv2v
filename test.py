@@ -161,7 +161,8 @@ h = AttrDict(json_config)
 print(h)
 
 # Load HiFi GAN
-torch_checkpoints = torch.load("singlevc/pretrained/HiFi-GAN/UNIVERSAL_V1/g_02500000", map_location=torch.device('cpu'))
+# torch_checkpoints = torch.load("singlevc/pretrained/HiFi-GAN/UNIVERSAL_V1/g_02500000", map_location=torch.device('cpu'))
+torch_checkpoints = torch.load("singlevc/pretrained/HiFi-GAN/UNIVERSAL_V1/g_02500000")
 # torch_checkpoints = torch.load("generator_v3", map_location=torch.device('cpu'))
 torch_generator_weights = torch_checkpoints["generator"]
 torch_model = Generator(h)
@@ -183,14 +184,15 @@ config_path = r"singlevc/infer_config.yaml"
 with open(config_path) as f:
     config = yaml.load(f, Loader=yaml.Loader)
 SVCGen = Solver(config)
+print('SVCGen device: ', SVCGen.device)
 
-# Conversion model anyvc
-config_path = r"singlevc/infer_config_any.yaml"
-with open(config_path) as f:
-    config = yaml.load(f, Loader=yaml.Loader)
-SVCGenA = SolverA(config)
-spkembe = SVCGenA.get_spkemb_mels("p230_023.wav")
-print(spkembe)
+# # Conversion model anyvc
+# config_path = r"singlevc/infer_config_any.yaml"
+# with open(config_path) as f:
+#     config = yaml.load(f, Loader=yaml.Loader)
+# SVCGenA = SolverA(config)
+# spkembe = SVCGenA.get_spkemb_mels("p230_023.wav")
+# print(spkembe)
 
 """
 def callback(in_data, frame_count, time_info, status):
@@ -249,13 +251,13 @@ def callback(in_data, frame_count, time_info, status):
 def callback_singlevc(in_data, frame_count, time_info, status):
     data = np.frombuffer(in_data, dtype=np.float32)
     # audio = normalize(audio) * 0.95
-    audio = torch.from_numpy(data).float()
+    audio = torch.from_numpy(data).float().cuda()
     audio = audio.unsqueeze(0)
 
     spec = mel_spectrogram_singlevc(audio, attr_d["n_fft"], attr_d["num_mels"], attr_d["sampling_rate"], 
         attr_d["hop_size"], attr_d["win_size"], attr_d["fmin"], attr_d["fmax"])
     # print(spec[:10])
-    print('mel hsape:', spec.shape)
+    print('mel hsape, device:', spec.shape, spec.device)
 
     with torch.no_grad():
         # spec = SVCGenA.infer(spec, spkembe)
@@ -264,7 +266,7 @@ def callback_singlevc(in_data, frame_count, time_info, status):
         hifigan_output = torch_model(spec)
     
     output = hifigan_output.squeeze().detach().numpy()
-    # print(output.shape)
+    print(output.shape)
 
     return (output, pyaudio.paContinue)
 
